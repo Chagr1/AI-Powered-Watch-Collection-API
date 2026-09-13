@@ -1,3 +1,6 @@
+## 🚀 API Endpoints (Swagger UI)
+
+![Swagger UI Screenshot](swagger-ui.png.png)
 # 🤖 AI-Powered Watch Collection REST API
 
 A modern, robust backend service built with **FastAPI**, **SQLAlchemy**, and **Groq LLM (Qwen)**. This project automates watch data collection by leveraging artificial intelligence to enrich technical specifications from simple brand and model inputs, complete with strict Pydantic validation, error handling, and a full CRUD lifecycle.
