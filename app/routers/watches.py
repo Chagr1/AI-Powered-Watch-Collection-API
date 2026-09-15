@@ -15,6 +15,14 @@ from io import BytesIO
 from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
 import uuid
+import math
+from app.schemas.watch import PaginatedWatchResponse
+from sqlalchemy import func
+from app.schemas.watch import WatchStatistics
+from app.models.watch import FavoriteDB
+from app.models.watch import ReviewDB
+from app.schemas.watch import ReviewCreate, ReviewResponse
+from app.services.ai_service import parse_recommendation_query
 
 router = APIRouter(
     prefix="/api/v1/watches",
@@ -68,17 +76,18 @@ def auto_add_watch(
     return new_watch
 
 
-@router.get("/", response_model=List[WatchResponse])
+@router.get("/", response_model=PaginatedWatchResponse, summary="Get paginated and filtered watches")
 def get_my_watches(
-        skip: int = Query(0, ge=0, description="Number of records to skip (for pagination)"),
-        limit: int = Query(10, ge=1, le=100, description="Maximum number of records to return"),
-        brand: str | None = Query(None, description="Filter watches by brand"),
+        page: int = Query(1, ge=1, description="Page number"),
+        limit: int = Query(10, ge=1, le=100, description="Number of items per page"),
+        brand: str | None = Query(None, description="Filter by brand (e.g., Seiko, Tissot)"),
+        movement: str | None = Query(None, description="Filter by movement type (e.g., Automatic, Quartz)"),
         db: Session = Depends(get_db),
         current_user: UserDB = Depends(get_current_user)
 ):
     """
-    Retrieves the watch collection of the currently logged-in user.
-    Supports pagination (skip, limit) and optional brand filtering.
+    Advanced paginated endpoint for retrieving the user's watch collection.
+    Supports filtering by brand and movement type.
     """
 
 
@@ -87,12 +96,25 @@ def get_my_watches(
 
     if brand:
         query = query.filter(WatchDB.brand.ilike(f"%{brand}%"))
+    if movement:
+        query = query.filter(WatchDB.movement_type.ilike(f"%{movement}%"))
 
 
+    total_items = query.count()
+    total_pages = math.ceil(total_items / limit) if total_items > 0 else 1
+
+
+    skip = (page - 1) * limit
     watches = query.offset(skip).limit(limit).all()
 
-    return watches
 
+    return {
+        "items": watches,
+        "page": page,
+        "limit": limit,
+        "total": total_items,
+        "pages": total_pages
+    }
 @router.get("", response_model=list[WatchResponse])
 def get_all_watches(
         brand: str | None = Query(None, description="Filter by brand name"),
@@ -127,6 +149,97 @@ def get_all_watches(
     return watches
 
 
+@router.get("/ai-recommend", summary="Get AI-powered watch recommendations from natural language")
+def get_ai_recommendations(
+        user_query: str = Query(..., description="E.g., 'Find me an automatic Seiko under 1000 dollars around 40mm'"),
+        db: Session = Depends(get_db)
+):
+
+
+
+    filters = parse_recommendation_query(user_query)
+
+
+    sql_query = db.query(WatchDB)
+
+
+    if "brand" in filters and filters["brand"]:
+        sql_query = sql_query.filter(WatchDB.brand.ilike(f"%{filters['brand']}%"))
+
+    if "movement_type" in filters and filters["movement_type"]:
+        sql_query = sql_query.filter(WatchDB.movement_type.ilike(f"%{filters['movement_type']}%"))
+
+    if "max_price" in filters and filters["max_price"]:
+        sql_query = sql_query.filter(WatchDB.price <= filters["max_price"])
+
+    if "min_price" in filters and filters["min_price"]:
+        sql_query = sql_query.filter(WatchDB.price >= filters["min_price"])
+
+    if "max_case_size" in filters and filters["max_case_size"]:
+        sql_query = sql_query.filter(WatchDB.case_size_mm <= filters["max_case_size"])
+
+    if "min_case_size" in filters and filters["min_case_size"]:
+        sql_query = sql_query.filter(WatchDB.case_size_mm >= filters["min_case_size"])
+
+
+    recommended_watches = sql_query.limit(10).all()
+
+
+    return {
+        "ai_understood_filters": filters,
+        "recommendations": recommended_watches
+    }
+
+
+@router.post("/{watch_id}/favorite", summary="Add a watch to favorites")
+def add_to_favorites(
+        watch_id: int,
+        db: Session = Depends(get_db),
+        current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Adds a specific watch to the logged-in user's favorites.
+    """
+
+    watch = db.query(WatchDB).filter(WatchDB.id == watch_id).first()
+    if not watch:
+        raise HTTPException(status_code=404, detail="Watch not found.")
+
+
+    existing_fav = db.query(FavoriteDB).filter(
+        FavoriteDB.user_id == current_user.id,
+        FavoriteDB.watch_id == watch_id
+    ).first()
+
+    if existing_fav:
+        raise HTTPException(status_code=400, detail="Watch is already in your favorites.")
+
+
+    new_fav = FavoriteDB(user_id=current_user.id, watch_id=watch_id)
+    db.add(new_fav)
+    db.commit()
+
+    return {"message": f"Successfully added '{watch.brand} {watch.model_name}' to favorites."}
+
+
+@router.get("/my/favorites", response_model=List[WatchResponse], summary="Get my favorite watches")
+def get_favorite_watches(
+        db: Session = Depends(get_db),
+        current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Retrieves a list of watches that the logged-in user has favorited.
+    Uses SQL JOIN to combine 'watches' and 'favorites' tables.
+    """
+
+    favorite_watches = db.query(WatchDB).join(
+        FavoriteDB, WatchDB.id == FavoriteDB.watch_id
+    ).filter(
+        FavoriteDB.user_id == current_user.id
+    ).all()
+
+    return favorite_watches
+
 @router.get("/{watch_id}", response_model=WatchResponse)
 def get_watch_by_id(
         watch_id: int,
@@ -143,6 +256,108 @@ def get_watch_by_id(
         raise HTTPException(status_code=404, detail="Watch not found in your collection")
     return watch
 
+
+@router.post("/{watch_id}/reviews", response_model=ReviewResponse, summary="Add a review and rating to a watch")
+def add_watch_review(
+        watch_id: int,
+        review_data: ReviewCreate,
+        db: Session = Depends(get_db),
+        current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Allows a logged-in user to add a 1-5 star rating and an optional comment to a specific watch.
+    """
+
+    watch = db.query(WatchDB).filter(WatchDB.id == watch_id).first()
+    if not watch:
+        raise HTTPException(status_code=404, detail="Watch not found.")
+
+
+    existing_review = db.query(ReviewDB).filter(
+        ReviewDB.user_id == current_user.id,
+        ReviewDB.watch_id == watch_id
+    ).first()
+
+    if existing_review:
+        raise HTTPException(status_code=400, detail="You have already reviewed this watch.")
+
+
+    new_review = ReviewDB(
+        rating=review_data.rating,
+        comment=review_data.comment,
+        user_id=current_user.id,
+        watch_id=watch_id
+    )
+    db.add(new_review)
+    db.commit()
+    db.refresh(new_review)
+
+    return new_review
+
+
+@router.get("/{watch_id}/reviews", response_model=List[ReviewResponse], summary="Get all reviews for a watch")
+def get_watch_reviews(
+        watch_id: int,
+        db: Session = Depends(get_db)
+):
+    """
+    Public endpoint to view all reviews and ratings for a specific watch.
+    Does NOT require authentication.
+    """
+
+    watch = db.query(WatchDB).filter(WatchDB.id == watch_id).first()
+    if not watch:
+        raise HTTPException(status_code=404, detail="Watch not found.")
+
+
+    reviews = db.query(ReviewDB).filter(ReviewDB.watch_id == watch_id).all()
+
+    return reviews
+
+
+@router.get("/statistics", response_model=WatchStatistics, summary="Get collection statistics")
+def get_collection_statistics(
+        db: Session = Depends(get_db),
+        current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Returns aggregated statistics for the user's watch collection.
+    Demonstrates SQL COUNT, AVG, and GROUP BY operations.
+    """
+
+
+    total = db.query(func.count(WatchDB.id)).filter(WatchDB.user_id == current_user.id).scalar() or 0
+
+
+    avg_price = db.query(func.avg(WatchDB.price)).filter(WatchDB.user_id == current_user.id).scalar() or 0.0
+
+
+    auto_count = db.query(func.count(WatchDB.id)).filter(
+        WatchDB.user_id == current_user.id,
+        WatchDB.is_automatic == True
+    ).scalar() or 0
+
+
+    quartz_count = db.query(func.count(WatchDB.id)).filter(
+        WatchDB.user_id == current_user.id,
+        WatchDB.movement_type.ilike("%quartz%")
+    ).scalar() or 0
+
+
+    brand_counts = db.query(WatchDB.brand, func.count(WatchDB.id)).filter(
+        WatchDB.user_id == current_user.id
+    ).group_by(WatchDB.brand).all()
+
+
+    brand_distribution = {brand: count for brand, count in brand_counts}
+
+    return {
+        "total_watches": total,
+        "average_price": round(avg_price, 2),  # Virgülden sonra 2 basamak
+        "automatic_count": auto_count,
+        "quartz_count": quartz_count,
+        "brand_distribution": brand_distribution
+    }
 
 @router.put("/{watch_id}", response_model=WatchResponse)
 def update_watch(
@@ -302,3 +517,5 @@ def get_shared_collection(
         "total_watches": len(watches),
         "collection": watches
     }
+
+

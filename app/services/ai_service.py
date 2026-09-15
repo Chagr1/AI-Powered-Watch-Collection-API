@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from app.core.config import settings
 from app.schemas.watch import AIWatchData
 
-
+# Initialize the AI Client (Groq/Owen)
 client = OpenAI(
     api_key=settings.GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1"
@@ -13,10 +13,6 @@ client = OpenAI(
 
 
 def analyze_watch_with_ai(brand: str, model_name: str) -> AIWatchData:
-    """
-    Marka ve model bilgisini alıp, Groq LLM üzerinden teknik detayları çeker
-    ve Pydantic şeması (AIWatchData) ile doğrulanmış olarak geri döndürür.
-    """
     prompt = f"""
     Analyze this watch: Brand: {brand}, Model: {model_name}.
     Return ONLY a raw JSON object with no markdown formatting.
@@ -30,7 +26,6 @@ def analyze_watch_with_ai(brand: str, model_name: str) -> AIWatchData:
     - "power_reserve_hours": integer or null
     - "ai_confidence": float between 0.0 and 1.0 (lower if you are guessing)
     """
-
 
     try:
         response = client.chat.completions.create(
@@ -46,10 +41,10 @@ def analyze_watch_with_ai(brand: str, model_name: str) -> AIWatchData:
 
     ai_output = response.choices[0].message.content.strip()
 
-
     if ai_output.startswith("```json"):
         ai_output = ai_output.replace("```json", "").replace("```", "").strip()
-
+    elif ai_output.startswith("```"):
+        ai_output = ai_output.replace("```", "").strip()
 
     try:
         raw_data = json.loads(ai_output)
@@ -64,44 +59,69 @@ def analyze_watch_with_ai(brand: str, model_name: str) -> AIWatchData:
 
 def extract_watch_info_from_text(description: str) -> dict:
     """
-    Kullanıcının girdiği doğal metni analiz edip yapılandırılmış JSON verisi döner.
+    Extracts watch details from a natural language description.
+    """
+    prompt = f"""
+    Extract watch details from the following text and return ONLY a raw JSON object with no markdown formatting.
+    Keys required: brand, model_name, is_automatic (boolean), movement_type, case_size_mm, crystal_type, water_resistance_m, strap_type. 
+    Text: '{description}'
     """
 
-    # GERÇEK OPENAI KODU (API Key'in olduğunda bunu kullanırsın):
+    try:
+        response = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1
+        )
+        ai_output = response.choices[0].message.content.strip()
+
+        if ai_output.startswith("```json"):
+            ai_output = ai_output.replace("```json", "").replace("```", "").strip()
+        elif ai_output.startswith("```"):
+            ai_output = ai_output.replace("```", "").strip()
+
+        return json.loads(ai_output)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI extraction failed: {str(e)}"
+        )
+
+
+def parse_recommendation_query(user_query: str) -> dict:
     """
-    prompt = f"Extract watch details from the following text and return ONLY a valid JSON object with keys: brand, model_name, is_automatic (boolean), movement_type, case_size_mm, crystal_type, water_resistance_m, strap_type. Text: '{description}'"
+    Converts natural language into structured SQL filters for watch recommendations.
+    """
+    prompt = f"""
+    You are a watch expert API. Extract search filters from the user's natural language query.
+    Return ONLY a raw JSON object (no markdown). Do not guess fields if not mentioned.
+    Possible JSON keys to output (only include if the user implies them):
+    - "max_price": float
+    - "min_price": float
+    - "movement_type": string (e.g., "Automatic", "Quartz")
+    - "brand": string
+    - "max_case_size": float
+    - "min_case_size": float
 
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.0
-    )
-    return json.loads(response.choices[0].message.content)
+    User Query: "{user_query}"
     """
 
-    # ŞİMDİLİK TEST İÇİN MOCK (SAHTE) YANIT:
-    # Metin içinde Tissot geçerse onu döndürelim, geçmezse standart bir şey dönsün.
-    if "tissot" in description.lower():
-        return {
-            "brand": "Tissot",
-            "model_name": "PRX Powermatic 80",
-            "is_automatic": True,
-            "movement_type": "Automatic",
-            "case_size_mm": 40.0,
-            "crystal_type": "Sapphire",
-            "water_resistance_m": 100,
-            "strap_type": "Stainless Steel",
-            "ai_confidence": 0.95
-        }
+    try:
+        response = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0
+        )
+        ai_output = response.choices[0].message.content.strip()
 
-    return {
-        "brand": "Unknown",
-        "model_name": "Unknown Model",
-        "is_automatic": False,
-        "movement_type": "Unknown",
-        "case_size_mm": 0.0,
-        "crystal_type": "Unknown",
-        "water_resistance_m": 0,
-        "strap_type": "Unknown",
-        "ai_confidence": 0.30
-    }
+        if ai_output.startswith("```json"):
+            ai_output = ai_output.replace("```json", "").replace("```", "").strip()
+        elif ai_output.startswith("```"):
+            ai_output = ai_output.replace("```", "").strip()
+
+        return json.loads(ai_output)
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI failed to parse recommendation query: {str(e)}"
+        )

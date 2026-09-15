@@ -1,4 +1,8 @@
 from pydantic import BaseModel, Field
+from typing import List
+from typing import Dict
+
+
 
 class WatchTextPrompt(BaseModel):
     description: str
@@ -47,6 +51,35 @@ class WatchResponse(WatchAutoCreate):
     ai_confidence: float
     needs_verification: bool
     user_id: int
+
+    class Config:
+        from_attributes = True
+
+
+class PaginatedWatchResponse(BaseModel):
+    items: List[WatchResponse]
+    page: int
+    limit: int
+    total: int
+    pages: int
+
+class WatchStatistics(BaseModel):
+    total_watches: int
+    average_price: float
+    automatic_count: int
+    quartz_count: int
+    brand_distribution: Dict[str, int]
+
+class ReviewCreate(BaseModel):
+    rating: int = Field(..., ge=1, le=5, description="Star rating from 1 to 5")
+    comment: str | None = Field(None, description="Optional text review")
+
+class ReviewResponse(BaseModel):
+    id: int
+    rating: int
+    comment: str | None
+    user_id: int
+    watch_id: int
 
     class Config:
         from_attributes = True
