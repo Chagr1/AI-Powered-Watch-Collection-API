@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List
 from typing import Dict
 
@@ -7,12 +7,13 @@ from typing import Dict
 class WatchTextPrompt(BaseModel):
     description: str
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
-                "description": "I just bought a blue dial Tissot PRX Powermatic 80 automatic watch."
+                "description": "Find me an automatic Seiko under 1000 dollars around 40mm"
             }
         }
+    )
 
 class WatchAutoCreate(BaseModel):
     brand: str
@@ -52,8 +53,7 @@ class WatchResponse(WatchAutoCreate):
     needs_verification: bool
     user_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaginatedWatchResponse(BaseModel):
@@ -81,5 +81,4 @@ class ReviewResponse(BaseModel):
     user_id: int
     watch_id: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

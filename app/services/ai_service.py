@@ -4,8 +4,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from app.core.config import settings
 from app.schemas.watch import AIWatchData
+import base64
 
-# Initialize the AI Client (Groq/Owen)
 client = OpenAI(
     api_key=settings.GROQ_API_KEY,
     base_url="https://api.groq.com/openai/v1"
@@ -124,4 +124,60 @@ def parse_recommendation_query(user_query: str) -> dict:
         raise HTTPException(
             status_code=502,
             detail=f"AI failed to parse recommendation query: {str(e)}"
+        )
+
+# Adapted from the official FastAPI documentation.
+def analyze_watch_image(image_bytes: bytes) -> dict:
+    """
+    Sends a watch image to Groq's Vision AI and extracts structural data.
+    """
+
+    base64_image = base64.b64encode(image_bytes).decode('utf-8')
+
+    prompt = """
+    Analyze this photo of a watch.
+    Identify the watch and return ONLY a raw JSON object (no markdown, no backticks).
+    Required keys:
+    - "brand": string (Guess if not explicitly written)
+    - "model_name": string
+    - "movement_type": string (e.g., "Automatic", "Quartz", "Digital")
+    - "case_size_mm": float (Estimate based on proportions)
+    - "strap_type": string (e.g., "Leather", "Stainless Steel", "Rubber")
+    - "ai_confidence": float between 0.0 and 1.0
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="qwen/qwen3.8-27b",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            temperature=0.1,
+            max_tokens=500
+        )
+
+        ai_output = response.choices[0].message.content.strip()
+
+        if ai_output.startswith("```json"):
+            ai_output = ai_output.replace("```json", "").replace("```", "").strip()
+        elif ai_output.startswith("```"):
+            ai_output = ai_output.replace("```", "").strip()
+
+        return json.loads(ai_output)
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Vision AI extraction failed: {str(e)}"
         )

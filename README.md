@@ -1,38 +1,35 @@
-## 🚀 API Endpoints (Swagger UI)
+# ⌚ AI-Powered Watch Collection REST API
+
+A modern, robust backend service built with **FastAPI** and **SQLAlchemy**, featuring AI-driven data enrichment via the **Groq LLM (Qwen)**. This API allows users to manage their watch collections, get automated specifications from AI, filter results dynamically, and extract advanced collection statistics.
 
 ![Swagger UI Screenshot](swagger-ui.png)
-# 🤖 AI-Powered Watch Collection REST API
 
-A modern, robust backend service built with **FastAPI**, **SQLAlchemy**, and **Groq LLM (Qwen)**. This project automates watch data collection by leveraging artificial intelligence to enrich technical specifications from simple brand and model inputs, complete with strict Pydantic validation, error handling, and a full CRUD lifecycle.
-
----
+🔗 **Live Demo (Swagger UI):** [Coming Soon - Will be added after deployment]
 
 ## 🚀 Key Features
-
-* **AI-Driven Data Enrichment:** Automatically fetches and structures technical details (movement type, case size, crystal type, water resistance, strap, power reserve) using an LLM.
-* **Confidence Scoring & Validation:** Evaluates AI outputs with an `ai_confidence` score and a Python-controlled `needs_verification` safety flag.
-* **Full CRUD Operations:** Create, Read, Update, and Delete watch records seamlessly.
-* **Advanced Search & Filtering:** Dynamic query parameters for filtering by brand, movement, crystal type, and case size range, supported by pagination.
-* **Data Integrity & Safety:** Duplicate prevention (`409 Conflict`), strict Pydantic v2 data bounds, and environment-based secret management (`.env`).
-
----
+- **JWT Authentication:** Secure user registration and login flows.
+- **AI-Powered Data Extraction:** Uses Groq API to parse natural language (e.g., *"Find me an automatic watch under $1000"*) into structured SQL queries.
+- **Advanced Filtering & Pagination:** Robust query parameters for seamless frontend integration (`limit`, `page`, `brand`, `movement`).
+- **Data Analytics (SQL Aggregation):** Generates portfolio statistics using `COUNT`, `AVG`, and `GROUP BY` operations.
+- **Complex Relationships:** 
+  - *Many-to-Many:* Users can add watches to their Favorites.
+  - *One-to-Many:* Users can leave 1-5 star ratings and reviews on watches.
+- **Data Export:** Export user-specific collection data directly to CSV using Pandas.
 
 ## 🛠️ Tech Stack
-
-* **Framework:** FastAPI (Python)
-* **Database & ORM:** SQLite & SQLAlchemy
-* **Validation:** Pydantic v2
-* **AI Integration:** Groq API (OpenAI client SDK)
-* **Environment Management:** python-dotenv
+- **Framework:** FastAPI, Pydantic v2
+- **Database:** SQLite (SQLAlchemy ORM)
+- **Migrations:** Alembic
+- **AI Integration:** Groq API (qwen3.8-27b)
+- **Security:** Passlib (Bcrypt), python-jose (JWT)
 
 ---
 
-## 📂 Project Architecture
+## 💻 Local Setup & Installation
 
-```text
-PythonAPI/
-│
-├── .env                # Environment variables (API keys)
-├── main.py             # Core FastAPI application & endpoints
-├── watch_collection.db # SQLite database (auto-generated)
-└── README.md           # Project documentation
+Follow these steps to run the project locally on your machine.
+
+### 1. Clone the repository
+```bash
+git clone [https://github.com/Chagr1/AI-Powered-Watch-Collection-API.git](https://github.com/Chagr1/AI-Powered-Watch-Collection-API.git)
+cd AI-Powered-Watch-Collection-API

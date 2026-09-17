@@ -1,28 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from app.database.database import get_db
-from app.models.watch import WatchDB
-from app.models.user import UserDB
-from app.schemas.watch import WatchAutoCreate, WatchResponse, WatchUpdate
-from app.services.ai_service import analyze_watch_with_ai
-from app.core.security import get_current_user
-from app.schemas.watch import WatchTextPrompt
-from app.services.ai_service import extract_watch_info_from_text
-from typing import List
-from fastapi import Query
-import pandas as pd
-from io import BytesIO
-from fastapi.responses import StreamingResponse
-from fastapi import HTTPException
-import uuid
+# 1. Standard Library Imports
 import math
-from app.schemas.watch import PaginatedWatchResponse
+import uuid
+from io import BytesIO
+from typing import List
+
+# 2. Third-Party Imports
+import pandas as pd
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
-from app.schemas.watch import WatchStatistics
-from app.models.watch import FavoriteDB
-from app.models.watch import ReviewDB
-from app.schemas.watch import ReviewCreate, ReviewResponse
-from app.services.ai_service import parse_recommendation_query
+from sqlalchemy.orm import Session
+
+# 3. Local Application Imports
+from app.core.security import get_current_user
+from app.database.database import get_db
+from app.models.user import UserDB
+from app.models.watch import FavoriteDB, ReviewDB, WatchDB
+from app.schemas.watch import (
+    PaginatedWatchResponse,
+    ReviewCreate,
+    ReviewResponse,
+    WatchAutoCreate,
+    WatchResponse,
+    WatchStatistics,
+    WatchTextPrompt,
+    WatchUpdate
+)
+from app.services.ai_service import (
+    analyze_watch_image,
+    analyze_watch_with_ai,
+    extract_watch_info_from_text,
+    parse_recommendation_query
+)
 
 router = APIRouter(
     prefix="/api/v1/watches",
@@ -188,6 +197,32 @@ def get_ai_recommendations(
     return {
         "ai_understood_filters": filters,
         "recommendations": recommended_watches
+    }
+
+
+@router.post("/analyze-image", summary="Upload a watch photo for AI analysis")
+async def analyze_image_endpoint(
+        file: UploadFile = File(...),
+        current_user: UserDB = Depends(get_current_user)
+):
+    """
+    Upload a picture of a watch. The Vision AI will analyze the image,
+    guess the brand/model, and return its structural features.
+    """
+
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Uploaded file must be an image format (jpeg, png, etc.)")
+
+
+    image_bytes = await file.read()
+
+
+    extracted_features = analyze_watch_image(image_bytes)
+
+    return {
+        "message": "Image analyzed successfully",
+        "filename": file.filename,
+        "extracted_features": extracted_features
     }
 
 
@@ -517,5 +552,3 @@ def get_shared_collection(
         "total_watches": len(watches),
         "collection": watches
     }
-
-
