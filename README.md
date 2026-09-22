@@ -15,21 +15,27 @@ A modern, robust backend service built with **FastAPI** and **SQLAlchemy**, feat
   - *Many-to-Many:* Users can add watches to their Favorites.
   - *One-to-Many:* Users can leave 1-5 star ratings and reviews on watches.
 - **Data Export:** Export user-specific collection data directly to CSV using Pandas.
+- **Containerized Architecture:** Fully containerized using **Docker** for rapid, plug-and-play deployment across any environment.
 
 ## 🛠️ Tech Stack
 - **Framework:** FastAPI, Pydantic v2
-- **Database:** SQLite (SQLAlchemy ORM)
+- **Database:** PostgreSQL (Neon Serverless) & SQLAlchemy ORM
 - **Migrations:** Alembic
 - **AI Integration:** Groq API (qwen3.8-27b)
 - **Security:** Passlib (Bcrypt), python-jose (JWT)
+- **DevOps:** Docker
 
 ---
 
 ## 💻 Local Setup & Installation
 
-Follow these steps to run the project locally on your machine.
+You can run this project instantly using **Docker (Recommended)** or set it up manually.
 
-### 1. Clone the repository
-```bash
-git clone [https://github.com/Chagr1/AI-Powered-Watch-Collection-API.git](https://github.com/Chagr1/AI-Powered-Watch-Collection-API.git)
-cd AI-Powered-Watch-Collection-API
+### Prerequisites
+Create a `.env` file in the root directory of the project with the following structure:
+```env
+DATABASE_URL=postgresql://user:password@endpoint.neon.tech/dbname?sslmode=require
+GROQ_API_KEY=your_groq_api_key
+SECRET_KEY=your_jwt_secret_key
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
