@@ -3,20 +3,35 @@ import sys
 from pathlib import Path
 from logging.config import fileConfig
 
+# 1. FORCE LOAD .ENV AND OVERRIDE EXISTING SYSTEM VARIABLES
+BASE_DIR = Path(__file__).resolve().parents[1]
+ENV_FILE_PATH = BASE_DIR / ".env"
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=ENV_FILE_PATH, override=True)
+
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
 
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-
+sys.path.append(str(BASE_DIR))
 from app.database.database import Base
 from app.models.user import UserDB
 from app.models.watch import WatchDB
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# 2. BYPASS PYDANTIC SETTINGS AND FETCH DIRECTLY FROM OS
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 config = context.config
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
+print(f"\n!!! ALEMBIC IS CONNECTING TO !!! -> {DATABASE_URL}\n")
+
+# ... (The rest of the file remains the same: if config.config_file_name is not None: ...)
+
+# ... (The rest of the file remains the same: if config.config_file_name is not None: ...)
+
+# ... (The rest of the file remains the same: if config.config_file_name is not None: ...)
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:

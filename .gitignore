@@ -3,3 +3,4 @@
 __pycache__/
 venv/
 .idea/
+watch_collection.db
